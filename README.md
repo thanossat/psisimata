@@ -2,7 +2,7 @@
 
 Εφαρμογή καταγραφής του κόστους ψησίματος στη σχολή κεραμικής: **5 €/kg ανά ψήσιμο**. Το κόστος επιμερίζεται στους **Θάνο, Ηλιάνα και Δημήτρη**.
 
-Η εφαρμογή λειτουργεί στο GitHub Pages: **https://thanossat.github.io/new/**
+Η εφαρμογή λειτουργεί στο GitHub Pages: **https://thanossat.github.io/psisimata/**
 
 ## Λειτουργίες
 
@@ -34,7 +34,7 @@ photos/
 Χωρίς token η εφαρμογή λειτουργεί μόνο για προβολή. Για καταχωρίσεις χρειάζεται ένα fine-grained token:
 
 1. Ανοίξτε το https://github.com/settings/personal-access-tokens/new
-2. Repository access: **Only select repositories**, και επιλέξτε **new**
+2. Repository access: **Only select repositories**, και επιλέξτε **psisimata**
 3. Repository permissions: **Contents: Read and write**
 4. Generate token. Στην εφαρμογή ανοίξτε **Ρυθμίσεις**, επικολλήστε το token και πατήστε **Αποθήκευση & έλεγχος**
 

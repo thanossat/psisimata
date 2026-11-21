@@ -215,7 +215,7 @@ function b64dec(b){const s=atob(b.replace(/\s/g,''));const u=new Uint8Array(s.le
 /* ---------- Ρυθμίσεις ---------- */
 function loadCfg(){
   let c={};try{c=JSON.parse(localStorage.getItem(CFG_KEY)||'{}')}catch(_){}
-  let owner='thanossat',repo='new';
+  let owner='thanossat',repo='psisimata';
   const h=location.hostname;
   if(h.endsWith('.github.io')){owner=h.split('.')[0];const seg=location.pathname.split('/').filter(Boolean)[0];if(seg&&!seg.includes('.'))repo=seg}
   return {owner:c.owner||owner,repo:c.repo||repo,branch:c.branch||'main',token:c.token||''};
