@@ -28,6 +28,20 @@
       "note": "",
       "created": "2026-11-21T14:33:40",
       "updated": "2026-11-21T14:33:54"
+    },
+    {
+      "id": "wddzjtjmw",
+      "date": "2026-11-21",
+      "artist": "thanos",
+      "title": "Βάζο",
+      "weight_g": 247,
+      "firings": 2,
+      "rate": 5,
+      "cost_eur": 2.47,
+      "photo": "photos/2026/11/20261121-thanos-9a9nib7s0.jpg",
+      "note": "",
+      "created": "2026-11-21T14:35:55",
+      "updated": "2026-11-21T14:35:55"
     }
   ]
 }
