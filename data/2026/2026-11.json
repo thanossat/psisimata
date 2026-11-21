@@ -13,7 +13,10 @@
       "photo": "photos/2026/11/20261109-thanos-oe6j93cnj.jpg",
       "note": "",
       "created": "2026-11-21T14:35:14",
-      "updated": "2026-11-21T14:35:14"
+      "updated": "2026-11-21T14:35:14",
+      "paid": {
+        "thanos": "2026-11-21"
+      }
     },
     {
       "id": "2s0ys1hcd",
@@ -56,7 +59,10 @@
       "photo": "photos/2026/11/20261121-thanos-9a9nib7s0.jpg",
       "note": "",
       "created": "2026-11-21T14:35:55",
-      "updated": "2026-11-21T14:35:55"
+      "updated": "2026-11-21T14:35:55",
+      "paid": {
+        "thanos": "2026-11-21"
+      }
     }
   ]
 }
