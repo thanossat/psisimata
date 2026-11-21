@@ -390,12 +390,15 @@ function renderYear(m){
 
 function renderSettings(m){
   const c=state.cfg;
-  m.innerHTML=`<div class="card"><h2>Σύνδεση με GitHub</h2>
+  m.innerHTML=`<div class="card" style="${c.token?'':'border:2px solid var(--accent)'}"><h2>GitHub token</h2>
+    <label class="f" for="sToken" style="color:var(--ink)">Επικολλήστε εδώ το token (ξεκινά με github_pat_)</label>
+    <input class="in" id="sToken" type="password" autocomplete="off" placeholder="github_pat_…" value="${esc(c.token)}">
+    <p class="note">Το token αποθηκεύεται μόνο σε αυτή τη συσκευή. Χωρίς token η εφαρμογή λειτουργεί μόνο για προβολή. Οδηγίες δημιουργίας υπάρχουν πιο κάτω.</p>
+    <details style="margin-top:10px"><summary class="note" style="cursor:pointer">Στοιχεία repository (δεν χρειάζεται αλλαγή)</summary>
     <label class="f" for="sOwner">Λογαριασμός</label><input class="in" id="sOwner" value="${esc(c.owner)}">
     <label class="f" for="sRepo">Repository</label><input class="in" id="sRepo" value="${esc(c.repo)}">
     <label class="f" for="sBranch">Branch</label><input class="in" id="sBranch" value="${esc(c.branch)}">
-    <label class="f" for="sToken">Token (fine-grained)</label><input class="in" id="sToken" type="password" autocomplete="off" placeholder="github_pat_…" value="${esc(c.token)}">
-    <p class="note">Το token αποθηκεύεται μόνο σε αυτή τη συσκευή. Χωρίς token η εφαρμογή λειτουργεί μόνο για προβολή.</p>
+    </details>
     <div class="btns"><button class="btn primary" id="sSave">Αποθήκευση & έλεγχος</button><button class="btn danger" id="sClear">Αφαίρεση token</button></div>
     <div class="note" id="sMsg"></div></div>
   <div class="card"><h2>Τιμή ψησίματος</h2>
@@ -519,6 +522,7 @@ $('saveBtn').onclick=onSave;$('delBtn').onclick=onDelete;$('cancelBtn').onclick=
 $('ov').onclick=e=>{if(e.target.id==='ov')closeForm()};
 $('addBtn').onclick=()=>openForm(null);
 $('refreshBtn').onclick=refreshAll;
+$('modeBadge').style.cursor='pointer';$('modeBadge').onclick=()=>setTab('settings');
 $('prevBtn').onclick=()=>{if(state.tab==='year')state.year=String(+state.year-1);else state.month=shiftMonth(state.month,-1);ensureView()};
 $('nextBtn').onclick=()=>{if(state.tab==='year')state.year=String(+state.year+1);else state.month=shiftMonth(state.month,1);ensureView()};
 document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>setTab(b.dataset.tab));
