@@ -45,6 +45,15 @@ h1{font-family:"Noto Serif",serif;font-weight:600;font-size:21px;margin:0}
 .item .title{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .item .calc{color:var(--muted);font-size:13px;font-variant-numeric:tabular-nums}
 .item .cost{font-weight:700;font-size:17px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.pay{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
+.paybtn{border:1px solid #e2c9c0;background:#fff;border-radius:99px;padding:4px 10px;font-size:12.5px;font-weight:600;cursor:pointer;color:#a3291b}
+.paybtn.on{background:#dcebe5;border-color:#a9cfc0;color:#2f6b4a}
+.paybtn:disabled{cursor:default;opacity:.8}
+.owed{color:#a3291b;font-weight:700}
+.clear{color:#2f6b4a;font-weight:700}
+.paid-row{grid-column:1/-1;display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13.5px;font-variant-numeric:tabular-nums}
+.btn.sm{padding:6px 10px;font-size:13px}
+.btn.sm.armed{background:#2f7a6a;border-color:#2f7a6a;color:#fff}
 .chip{display:inline-flex;align-items:center;font-size:12px;font-weight:600;padding:2px 8px;border-radius:99px;color:#fff;width:max-content}
 .empty,.loading{text-align:center;color:var(--muted);padding:40px 10px;border:1px dashed var(--line);border-radius:var(--radius);margin-top:14px}
 .errbox{background:#fbe9e5;border:1px solid #efc3b9;color:#8a2a1b;border-radius:12px;padding:12px;margin-top:14px;font-size:14px}
@@ -276,18 +285,52 @@ async function ensureView(){
   try{
     if(!state.loaded)await loadIndex();
     if(state.tab==='list'||state.tab==='month')await loadMonth(state.month);
-    if(state.tab==='year')await Promise.all(state.months.filter(m=>m.startsWith(state.year+'-')).map(m=>loadMonth(m)));
+    if(state.tab==='year'||state.tab==='month')await Promise.all(state.months.map(m=>loadMonth(m)));
   }catch(e){state.error=e.message||String(e)}
   state.loading=false;render();
 }
 async function refreshAll(){state.loaded=false;state.cache={};state.blobPhotos={};await ensureView();toast('Τα δεδομένα ανανεώθηκαν')}
 
 /* ---------- Υπολογισμοί ---------- */
+const isPaid=(e,p)=>e.paid===true||!!(e.paid&&e.paid[p]);
+const payersOf=e=>e.artist==='shared'?PEOPLE:(PEOPLE.includes(e.artist)?[e.artist]:[]);
+const shareOf=(e,p)=>{const c=costOf(e);return e.artist==='shared'?r2(c/3):(e.artist===p?c:0)};
 function summarize(entries){
-  const own={thanos:0,iliana:0,dimitris:0},cnt={thanos:0,iliana:0,dimitris:0};let shared=0,sharedN=0,g=0,f=0;
-  entries.forEach(e=>{const c=costOf(e);g+=e.weight_g;f+=e.firings;if(e.artist==='shared'){shared+=c;sharedN++}else if(own[e.artist]!==undefined){own[e.artist]+=c;cnt[e.artist]++}});
-  const share=r2(shared/3);const tot={};PEOPLE.forEach(p=>tot[p]=r2(own[p]+share));
-  return {n:entries.length,own,cnt,shared:r2(shared),sharedN,share,tot,grand:r2(entries.reduce((s,e)=>s+costOf(e),0)),g,f};
+  const z=()=>({thanos:0,iliana:0,dimitris:0});
+  const own=z(),cnt=z(),tot=z(),paid=z(),owed=z();let shared=0,sharedN=0,g=0,f=0;
+  entries.forEach(e=>{const c=costOf(e);g+=e.weight_g;f+=e.firings;
+    if(e.artist==='shared'){shared+=c;sharedN++}else if(own[e.artist]!==undefined){own[e.artist]+=c;cnt[e.artist]++}
+    payersOf(e).forEach(p=>{const s=shareOf(e,p);tot[p]+=s;if(isPaid(e,p))paid[p]+=s;else owed[p]+=s})});
+  PEOPLE.forEach(p=>{own[p]=r2(own[p]);tot[p]=r2(tot[p]);paid[p]=r2(paid[p]);owed[p]=r2(owed[p])});
+  return {n:entries.length,own,cnt,shared:r2(shared),sharedN,share:r2(shared/3),tot,paid,owed,
+    owedAll:r2(PEOPLE.reduce((s,p)=>s+owed[p],0)),grand:r2(entries.reduce((s,e)=>s+costOf(e),0)),g,f};
+}
+function sumAll(ms){const all=[];ms.forEach(m=>all.push(...((state.cache[m]||{}).entries||[])));return summarize(all)}
+const owedHtml=v=>v>0?`<span class="owed">${eur(v)}</span>`:`<span class="clear">${eur(0)}</span>`;
+
+/* ---------- Πληρωμές ---------- */
+function markPaid(x,p,to){
+  const pd=x.paid===true?Object.fromEntries(payersOf(x).map(q=>[q,today()])):{...(x.paid||{})};
+  if(to)pd[p]=today();else delete pd[p];
+  return {...x,paid:pd};
+}
+async function togglePaid(id,p,btn){
+  const m=state.month;const e=(state.cache[m]?.entries||[]).find(x=>x.id===id);if(!e)return;
+  const to=!isPaid(e,p);btn.disabled=true;btn.textContent='…';
+  try{
+    state.cache[m]=await updateJSON(monthPath(m),d=>({...(d||{month:m}),entries:((d&&d.entries)||[]).map(x=>x.id===id?markPaid(x,p,to):x)}),
+      `${to?'Πληρωμή':'Αναίρεση πληρωμής'}: ${ARTISTS[p].name} — ${e.title||'αντικείμενο'} (${m})`);
+    render();toast(to?'Σημειώθηκε ως πληρωμένο':'Η πληρωμή αναιρέθηκε');
+  }catch(err){render();toast('Σφάλμα: '+err.message,4000)}
+}
+async function settleMonth(p,btn){
+  if(!btn.classList.contains('armed')){btn.classList.add('armed');btn.textContent='Επιβεβαίωση εξόφλησης';return}
+  const m=state.month;btn.disabled=true;btn.textContent='…';
+  try{
+    state.cache[m]=await updateJSON(monthPath(m),d=>({...(d||{month:m}),entries:((d&&d.entries)||[]).map(x=>payersOf(x).includes(p)&&!isPaid(x,p)?markPaid(x,p,true):x)}),
+      `Εξόφληση: ${ARTISTS[p].name} — ${monthLabel(m)}`);
+    render();toast(`Εξοφλήθηκε ο μήνας για ${ARTISTS[p].name}`);
+  }catch(err){render();toast('Σφάλμα: '+err.message,4000)}
 }
 const monthEntries=m=>((state.cache[m]||{}).entries||[]).slice().sort((a,b)=>b.date.localeCompare(a.date));
 function yearYears(){const ys=new Set(state.months.map(m=>m.slice(0,4)));ys.add(now.slice(0,4));ys.add(state.year);return [...ys].sort().reverse()}
@@ -329,7 +372,7 @@ function renderList(m){
   const es=monthEntries(state.month);const S=summarize(es);
   const banner=canWrite()?'':`<div class="info">Λειτουργία προβολής. Για να προσθέσετε καταχωρίσεις, ορίστε το GitHub token στις <a href="#" id="toSet">Ρυθμίσεις</a>.</div>`;
   m.innerHTML=banner+kpiHtml(S)+(es.length?`<div class="list">${es.map(e=>{const a=ARTISTS[e.artist]||ARTISTS.shared;const c=costOf(e);return `
-    <button class="item" data-id="${esc(e.id)}">
+    <div class="item" role="button" tabindex="0" data-id="${esc(e.id)}">
       <img data-photo="${esc(e.photo)}" src="${esc(photoSrc(e.photo))}" alt="" loading="lazy">
       <div class="body">
         <div class="top"><span class="title">${esc(e.title||'Χωρίς περιγραφή')}</span><span class="cost">${eur(c)}</span></div>
@@ -337,9 +380,13 @@ function renderList(m){
         <span class="calc">${kg(e.weight_g)} × ${e.firings} ${e.firings===1?'ψήσιμο':'ψησίματα'} × ${eur(e.rate??state.rate)}/kg</span>
         ${e.artist==='shared'?`<span class="calc">Ανά καλλιτέχνη: ${eur(r2(c/3))}</span>`:''}
         <span class="calc">${new Date(e.date+'T12:00').toLocaleDateString('el-GR',{day:'numeric',month:'short'})}${e.note?' · '+esc(e.note):''}</span>
+        <div class="pay">${payersOf(e).map(p=>{const on=isPaid(e,p);const lbl=e.artist==='shared'?ARTISTS[p].name:(on?'Πληρώθηκε':'Απλήρωτο');return `<button type="button" class="paybtn ${on?'on':''}" data-pay="${p}" ${canWrite()?'':'disabled'}>${on?'☑':'☐'} ${lbl}</button>`}).join('')}</div>
       </div>
-    </button>`}).join('')}</div>`:`<div class="empty">Δεν υπάρχουν καταχωρίσεις για ${monthLabel(state.month)}.${canWrite()?'<br>Πατήστε «+ Νέα καταχώριση».':''}</div>`);
-  m.querySelectorAll('.item').forEach(b=>b.onclick=()=>{if(canWrite())openForm(b.dataset.id)});
+    </div>`}).join('')}</div>`:`<div class="empty">Δεν υπάρχουν καταχωρίσεις για ${monthLabel(state.month)}.${canWrite()?'<br>Πατήστε «+ Νέα καταχώριση».':''}</div>`);
+  m.querySelectorAll('.item').forEach(b=>b.onclick=ev=>{
+    const pb=ev.target.closest('.paybtn');
+    if(pb){ev.stopPropagation();if(canWrite()&&!pb.disabled)togglePaid(b.dataset.id,pb.dataset.pay,pb);return}
+    if(canWrite())openForm(b.dataset.id)});
   if($('toSet'))$('toSet').onclick=e=>{e.preventDefault();setTab('settings')};
   wirePhotos(m);
 }
@@ -351,15 +398,28 @@ function renderMonth(m){
     ${PEOPLE.map(p=>{const a=ARTISTS[p];return `<div class="row">
       <span class="name" style="color:${a.color}">${a.name}</span><span class="total">${eur(S.tot[p])}</span>
       <div class="bar"><span style="width:${S.tot[p]/max*100}%;background:${a.color}"></span></div>
-      <span class="detail">Δικά του/της: ${S.cnt[p]} αντ. = ${eur(r2(S.own[p]))}${S.sharedN?` · Μερίδιο κοινών: ${eur(S.share)}`:''}</span></div>`}).join('')}
+      <span class="detail">Δικά του/της: ${S.cnt[p]} αντ. = ${eur(S.own[p])}${S.sharedN?` · Μερίδιο κοινών: ${eur(r2(S.tot[p]-S.own[p]))}`:''}</span>
+      <div class="paid-row"><span>Πληρωμένα: ${eur(S.paid[p])} · Οφειλόμενα: ${owedHtml(S.owed[p])}</span>
+        ${canWrite()&&S.owed[p]>0?`<button class="btn sm" data-settle="${p}">Εξόφληση μήνα</button>`:''}</div></div>`}).join('')}
     <div class="grand"><span>Σύνολο μήνα</span><span>${eur(S.grand)}</span></div>
+    <div class="paid-row" style="margin-top:6px"><span>Οφειλόμενα μήνα (όλοι)</span>${owedHtml(S.owedAll)}</div>
     ${S.sharedN?`<p class="check">Κοινά αντικείμενα: ${S.sharedN}, κόστος ${eur(S.shared)} ÷ 3 = ${eur(S.share)} ανά καλλιτέχνη.</p>`:''}
     ${Math.abs(check-S.grand)>0.001?`<p class="check">Διαφορά στρογγυλοποίησης: άθροισμα μεριδίων ${eur(check)} έναντι συνόλου ${eur(S.grand)}.</p>`:''}
   </div>
+  ${balancesCard()}
   <div class="btns"><button class="btn primary" id="copyM">Αντιγραφή σύνοψης μήνα</button></div>`;
-  $('copyM').onclick=()=>copyText(`Ψησίματα ${monthLabel(state.month)}\n`+PEOPLE.map(p=>`${ARTISTS[p].name}: ${eur(S.tot[p])}`).join('\n')+`\nΣύνολο: ${eur(S.grand)}`,'Η σύνοψη μήνα αντιγράφηκε');
+  m.querySelectorAll('[data-settle]').forEach(b=>b.onclick=()=>settleMonth(b.dataset.settle,b));
+  $('copyM').onclick=()=>copyText(`Ψησίματα ${monthLabel(state.month)}\n`+PEOPLE.map(p=>`${ARTISTS[p].name}: ${eur(S.tot[p])}${S.owed[p]>0?` (οφείλει ${eur(S.owed[p])})`:' (εξοφλημένο)'}`).join('\n')+`\nΣύνολο: ${eur(S.grand)}`,'Η σύνοψη μήνα αντιγράφηκε');
 }
 
+function balancesCard(){
+  const A=sumAll(state.months);if(!A.n)return '';
+  return `<div class="card"><h2>Γενικό σύνολο (όλα τα έτη)</h2>
+    ${PEOPLE.map(p=>{const a=ARTISTS[p];return `<div class="row"><span class="name" style="color:${a.color}">${a.name}</span><span class="total">${eur(A.tot[p])}</span>
+      <div class="paid-row"><span>Πληρωμένα: ${eur(A.paid[p])}</span><span>Οφειλόμενα: ${owedHtml(A.owed[p])}</span></div></div>`}).join('')}
+    <div class="grand"><span>Σύνολο όλων</span><span>${eur(A.grand)}</span></div>
+    <div class="paid-row" style="margin-top:6px"><span>Εκκρεμή οφειλές (όλοι)</span>${owedHtml(A.owedAll)}</div></div>`;
+}
 function renderYear(m){
   const y=state.year;const rows=[];const yt={thanos:0,iliana:0,dimitris:0};let grand=0,n=0,g=0,f=0;
   for(let i=1;i<=12;i++){
@@ -368,24 +428,28 @@ function renderYear(m){
     PEOPLE.forEach(p=>yt[p]+=S.tot[p]);grand+=S.grand;n+=S.n;g+=S.g;f+=S.f;rows.push({mm,i,S});
   }
   PEOPLE.forEach(p=>yt[p]=r2(yt[p]));grand=r2(grand);
+  const YS=sumAll(state.months.filter(mm=>mm.startsWith(y+'-')));
   const max=Math.max(1,...PEOPLE.map(p=>yt[p]));
   m.innerHTML=`<div class="card"><h2>Αρχείο ετών</h2><div class="years">${yearYears().map(yy=>`<button data-y="${yy}" class="${yy===y?'on':''}">${yy}</button>`).join('')}</div></div>`
   +`<div class="kpis"><div class="kpi"><small>Αντικείμενα</small><b>${n}</b></div><div class="kpi"><small>Συνολικό βάρος</small><b>${kg(g)}</b></div><div class="kpi"><small>Κόστος έτους</small><b>${eur(grand)}</b></div></div>`
   +(rows.length?`<div class="card"><h2>Σύνολα έτους ${y} ανά καλλιτέχνη</h2>
     ${PEOPLE.map(p=>{const a=ARTISTS[p];return `<div class="row"><span class="name" style="color:${a.color}">${a.name}</span><span class="total">${eur(yt[p])}</span>
-      <div class="bar"><span style="width:${yt[p]/max*100}%;background:${a.color}"></span></div></div>`}).join('')}
+      <div class="bar"><span style="width:${yt[p]/max*100}%;background:${a.color}"></span></div>
+      <div class="paid-row"><span>Πληρωμένα: ${eur(YS.paid[p])}</span><span>Οφειλόμενα: ${owedHtml(YS.owed[p])}</span></div></div>`}).join('')}
     <div class="grand"><span>Σύνολο έτους</span><span>${eur(grand)}</span></div>
+    <div class="paid-row" style="margin-top:6px"><span>Οφειλόμενα έτους (όλοι)</span>${owedHtml(YS.owedAll)}</div>
     <p class="check">${rows.length} μήνες με ψησίματα · ${f} ψησίματα συνολικά.</p></div>
   <div class="card"><h2>Ανά μήνα (€)</h2>
     <table class="yr"><thead><tr><th>Μήνας</th><th>Θάνος</th><th>Ηλιάνα</th><th>Δημήτρης</th><th>Σύνολο</th></tr></thead>
     <tbody>${rows.map(r=>`<tr data-m="${r.mm}"><td>${MSHORT[r.i-1]}</td>${PEOPLE.map(p=>`<td class="${r.S.tot[p]?'':'z'}">${num(r.S.tot[p])}</td>`).join('')}<td><b>${num(r.S.grand)}</b></td></tr>`).join('')}</tbody>
     <tfoot><tr><td>Σύνολο</td>${PEOPLE.map(p=>`<td>${num(yt[p])}</td>`).join('')}<td>${num(grand)}</td></tr></tfoot></table>
     <p class="note">Πατήστε έναν μήνα για να δείτε τις καταχωρίσεις του.</p></div>
+  ${balancesCard()}
   <div class="btns"><button class="btn primary" id="copyY">Αντιγραφή σύνοψης έτους</button></div>`
   :`<div class="empty">Δεν υπάρχουν καταχωρίσεις για το ${y}.</div>`);
   m.querySelectorAll('.years button').forEach(b=>b.onclick=()=>{state.year=b.dataset.y;ensureView()});
   m.querySelectorAll('tr[data-m]').forEach(tr=>tr.onclick=()=>{state.month=tr.dataset.m;setTab('list')});
-  if($('copyY'))$('copyY').onclick=()=>copyText(`Ψησίματα έτους ${y}\n`+rows.map(r=>`${MONTHS[r.i-1]}: ${eur(r.S.grand)} (Θ ${num(r.S.tot.thanos)} · Η ${num(r.S.tot.iliana)} · Δ ${num(r.S.tot.dimitris)})`).join('\n')+`\n\n`+PEOPLE.map(p=>`${ARTISTS[p].name}: ${eur(yt[p])}`).join('\n')+`\nΣύνολο έτους: ${eur(grand)}`,'Η σύνοψη έτους αντιγράφηκε');
+  if($('copyY'))$('copyY').onclick=()=>copyText(`Ψησίματα έτους ${y}\n`+rows.map(r=>`${MONTHS[r.i-1]}: ${eur(r.S.grand)} (Θ ${num(r.S.tot.thanos)} · Η ${num(r.S.tot.iliana)} · Δ ${num(r.S.tot.dimitris)})`).join('\n')+`\n\n`+PEOPLE.map(p=>`${ARTISTS[p].name}: ${eur(yt[p])}${YS.owed[p]>0?` (οφείλει ${eur(YS.owed[p])})`:' (εξοφλημένο)'}`).join('\n')+`\nΣύνολο έτους: ${eur(grand)}`,'Η σύνοψη έτους αντιγράφηκε');
 }
 
 function renderSettings(m){
@@ -476,7 +540,7 @@ async function onSave(){
   if(!date){$('fErr').textContent='Επιλέξτε ημερομηνία.';return}
   $('fErr').textContent='';
   const rate=old?(old.rate??state.rate):state.rate;
-  const entry={id:f.id,date,artist:f.artist,title:$('fName').value.trim(),weight_g:g,firings:f.firings,rate,cost_eur:calcCost(g,f.firings,rate),photo:f.photo,note:$('fN').value.trim(),created:old?.created||new Date().toISOString().slice(0,19),updated:new Date().toISOString().slice(0,19)};
+  const entry={id:f.id,date,artist:f.artist,title:$('fName').value.trim(),weight_g:g,firings:f.firings,rate,cost_eur:calcCost(g,f.firings,rate),photo:f.photo,note:$('fN').value.trim(),paid:(old&&old.paid)||{},created:old?.created||new Date().toISOString().slice(0,19),updated:new Date().toISOString().slice(0,19)};
   const m=monthOf(date),who=ARTISTS[entry.artist].name,lbl=entry.title||'αντικείμενο';
   try{
     if(f.photoData){
