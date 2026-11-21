@@ -527,6 +527,8 @@ $('prevBtn').onclick=()=>{if(state.tab==='year')state.year=String(+state.year-1)
 $('nextBtn').onclick=()=>{if(state.tab==='year')state.year=String(+state.year+1);else state.month=shiftMonth(state.month,1);ensureView()};
 document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>setTab(b.dataset.tab));
 
+if(location.hash==='#settings'||location.hash==='#token')state.tab='settings';
+window.addEventListener('hashchange',()=>{if(location.hash==='#settings'||location.hash==='#token')setTab('settings')});
 ensureView();
 </script>
 </body>
