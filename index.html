@@ -29,7 +29,7 @@ h1{font-family:"Noto Serif",serif;font-weight:600;font-size:21px;margin:0}
 .nav button{border:0;background:transparent;width:40px;height:36px;border-radius:9px;font-size:18px;cursor:pointer}
 .nav button:hover{background:#f1e7db}
 .nav strong{font-weight:600}
-.tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:10px}
+.tabs{display:grid;grid-template-columns:repeat(4,1fr) 46px;gap:6px;margin-top:10px}
 .tabs button{border:1px solid var(--line);background:var(--card);padding:8px 4px;border-radius:10px;cursor:pointer;font-weight:500;font-size:13.5px}
 .tabs button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
 .kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:14px 0}
@@ -115,6 +115,17 @@ label.f{display:block;font-size:13px;font-weight:600;color:var(--muted);margin:1
 .toast.show{opacity:1}
 ol.steps{padding-left:20px;margin:6px 0;font-size:13.5px}
 ol.steps li{margin:4px 0}
+/* καμίνι */
+.presets{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:4px}
+.presets button{border:1px solid var(--line);background:var(--card);border-radius:99px;padding:6px 12px;cursor:pointer;font-weight:600;font-size:13px}
+.presets button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+.kres{margin-top:12px}
+.kres .row{grid-template-columns:1fr auto;padding:8px 0}
+.kres .row .name{font-weight:500}
+.kres .row .total{font-size:15.5px}
+.cmp{display:grid;grid-template-columns:auto 1fr auto;gap:6px 10px;align-items:center;margin-top:10px;font-size:13px;font-variant-numeric:tabular-nums}
+.cmp .bar{grid-column:auto}
+.big{font-size:24px;font-weight:700;font-variant-numeric:tabular-nums}
 </style>
 </head>
 <body>
@@ -133,10 +144,11 @@ ol.steps li{margin:4px 0}
       <button id="nextBtn" aria-label="Επόμενο">›</button>
     </div>
     <div class="tabs" role="tablist">
-      <button data-tab="list">Καταχωρίσεις</button>
+      <button data-tab="list">Λίστα</button>
       <button data-tab="month">Μήνας</button>
       <button data-tab="year">Έτος</button>
-      <button data-tab="settings">Ρυθμίσεις</button>
+      <button data-tab="kiln">Καμίνι</button>
+      <button data-tab="settings" title="Ρυθμίσεις" aria-label="Ρυθμίσεις">⚙</button>
     </div>
   </header>
   <main id="main"></main>
@@ -200,6 +212,13 @@ const PEOPLE=['thanos','iliana','dimitris'];
 const MONTHS=['Ιανουάριος','Φεβρουάριος','Μάρτιος','Απρίλιος','Μάιος','Ιούνιος','Ιούλιος','Αύγουστος','Σεπτέμβριος','Οκτώβριος','Νοέμβριος','Δεκέμβριος'];
 const MSHORT=['Ιαν','Φεβ','Μάρ','Απρ','Μάι','Ιούν','Ιούλ','Αύγ','Σεπ','Οκτ','Νοέ','Δεκ'];
 const CFG_KEY='psisimata.cfg';
+/* Καμίνι: προεπιλογές (Κ. Μπόνης ~12 kW, εκτίμηση από φωτογραφίες) */
+const KILN_DEF={kw:12,price:0.25,hours:9,duty:55,load:30,kwh:0,sides:12,diam:55,depth:75};
+const KILN_PRESETS=[
+  {k:'bisque',lbl:'Μπισκότο ~950°C',hours:9,duty:55},
+  {k:'low',lbl:'Χαμηλή ~1050°C',hours:10,duty:60},
+  {k:'high',lbl:'Υψηλή ~1250°C',hours:12,duty:70}
+];
 
 /* ---------- Βοηθητικά ---------- */
 const $=id=>document.getElementById(id);
@@ -234,7 +253,7 @@ function saveCfg(){try{localStorage.setItem(CFG_KEY,JSON.stringify(state.cfg))}c
 /* ---------- Κατάσταση ---------- */
 const now=today();
 const state={
-  cfg:loadCfg(),rate:5,months:[],cache:{},loaded:false,
+  cfg:loadCfg(),rate:5,months:[],cache:{},loaded:false,kiln:{...KILN_DEF},
   month:monthOf(now),year:now.slice(0,4),tab:'list',
   loading:false,error:null,form:null,edit:null,busy:false,localPhotos:{},blobPhotos:{}
 };
@@ -273,6 +292,7 @@ async function deleteFile(path,message){
 async function loadIndex(){
   const ix=await readJSON('data/index.json')||{rate:5,months:[]};
   state.rate=typeof ix.rate==='number'?ix.rate:5;state.months=(ix.months||[]).slice().sort();state.loaded=true;
+  state.kiln={...KILN_DEF,...(ix.kiln&&typeof ix.kiln==='object'?ix.kiln:{})};
 }
 async function loadMonth(m,force){
   if(state.cache[m]&&!force)return state.cache[m];
@@ -284,7 +304,7 @@ async function ensureView(){
   state.loading=true;state.error=null;render();
   try{
     if(!state.loaded)await loadIndex();
-    if(state.tab==='list'||state.tab==='month')await loadMonth(state.month);
+    if(state.tab==='list'||state.tab==='month'||state.tab==='kiln')await loadMonth(state.month);
     if(state.tab==='year'||state.tab==='month')await Promise.all(state.months.map(m=>loadMonth(m)));
   }catch(e){state.error=e.message||String(e)}
   state.loading=false;render();
@@ -359,12 +379,12 @@ function render(){
   document.querySelectorAll('.tabs button').forEach(b=>b.classList.toggle('on',b.dataset.tab===state.tab));
   $('nav').style.display=state.tab==='settings'?'none':'flex';
   $('navLbl').textContent=state.tab==='year'?'Έτος '+state.year:monthLabel(state.month);
-  $('addBtn').hidden=ro||state.tab==='settings';
+  $('addBtn').hidden=ro||state.tab==='settings'||state.tab==='kiln';
   const m=$('main');
   if(state.tab==='settings')return renderSettings(m);
   if(state.loading){m.innerHTML='<div class="loading">Φόρτωση…</div>';return}
   if(state.error){m.innerHTML=`<div class="errbox"><b>Σφάλμα:</b> ${esc(state.error)}<div class="btns"><button class="btn" id="retryBtn">Επανάληψη</button></div></div>`;$('retryBtn').onclick=()=>ensureView();return}
-  if(state.tab==='list')renderList(m);else if(state.tab==='month')renderMonth(m);else renderYear(m);
+  if(state.tab==='list')renderList(m);else if(state.tab==='month')renderMonth(m);else if(state.tab==='kiln')renderKiln(m);else renderYear(m);
 }
 function kpiHtml(S){return `<div class="kpis"><div class="kpi"><small>Αντικείμενα</small><b>${S.n}</b></div><div class="kpi"><small>Συνολικό βάρος</small><b>${kg(S.g)}</b></div><div class="kpi"><small>Κόστος</small><b>${eur(S.grand)}</b></div></div>`}
 
@@ -450,6 +470,89 @@ function renderYear(m){
   m.querySelectorAll('.years button').forEach(b=>b.onclick=()=>{state.year=b.dataset.y;ensureView()});
   m.querySelectorAll('tr[data-m]').forEach(tr=>tr.onclick=()=>{state.month=tr.dataset.m;setTab('list')});
   if($('copyY'))$('copyY').onclick=()=>copyText(`Ψησίματα έτους ${y}\n`+rows.map(r=>`${MONTHS[r.i-1]}: ${eur(r.S.grand)} (Θ ${num(r.S.tot.thanos)} · Η ${num(r.S.tot.iliana)} · Δ ${num(r.S.tot.dimitris)})`).join('\n')+`\n\n`+PEOPLE.map(p=>`${ARTISTS[p].name}: ${eur(yt[p])}${YS.owed[p]>0?` (οφείλει ${eur(YS.owed[p])})`:' (εξοφλημένο)'}`).join('\n')+`\nΣύνολο έτους: ${eur(grand)}`,'Η σύνοψη έτους αντιγράφηκε');
+}
+
+/* ---------- Καμίνι: κόστος ρεύματος ---------- */
+function kilnCalc(){
+  const k=state.kiln;
+  const est=k.kw*k.hours*k.duty/100;
+  const measured=k.kwh>0;const kwh=measured?k.kwh:est;
+  const cost=kwh*k.price;const perKg=k.load>0?cost/k.load:0;
+  const school=k.load*state.rate;const pct=school>0?cost/school*100:0;
+  const a=k.diam/2;const vol=k.sides>=3?k.sides*a*a*Math.tan(Math.PI/k.sides)*k.depth/1000:0;
+  return {est,measured,kwh,cost,perKg,school,pct,vol};
+}
+const n1=v=>v.toLocaleString('el-GR',{maximumFractionDigits:1});
+function kField(key,label,step,ph){
+  const v=state.kiln[key];
+  return `<div><label class="f" for="k_${key}">${label}</label><input class="in" id="k_${key}" data-k="${key}" type="number" inputmode="decimal" min="0" step="${step}" value="${key==='kwh'&&!v?'':v}" ${ph?`placeholder="${ph}"`:''}></div>`;
+}
+function renderKiln(m){
+  m.innerHTML=`<div class="card"><h2>Κόστος ρεύματος ανά φούρνισμα</h2>
+    <div class="presets" id="kPresets">${KILN_PRESETS.map(p=>`<button type="button" data-p="${p.k}">${p.lbl}</button>`).join('')}</div>
+    <div class="two">
+      ${kField('kw','Ισχύς καμινιού (kW)',0.5)}
+      ${kField('price','Τιμή ρεύματος (€/kWh)',0.01)}
+      ${kField('hours','Διάρκεια ψησίματος (ώρες)',0.5)}
+      ${kField('duty','Μέση λειτουργία αντιστάσεων (%)',5)}
+      ${kField('load','Φορτίο φουρνίσματος (kg)',1)}
+      ${kField('kwh','Μετρημένες kWh (προαιρετικά)',1,'από τον μετρητή')}
+    </div>
+    <div class="live"><small id="kLiveLbl">Ρεύμα ανά φούρνισμα</small><b id="kLive">—</b></div>
+    <div class="kres" id="kRes"></div>
+    <p class="note">Η τιμή ρεύματος πρέπει να περιλαμβάνει τις ρυθμιζόμενες χρεώσεις και τον ΦΠΑ (περίπου 0,22–0,28 €/kWh, Νοέμβριος 2026). Η «μέση λειτουργία» είναι το ποσοστό του χρόνου που οι αντιστάσεις είναι αναμμένες: συνήθως 50–60% σε χαμηλές θερμοκρασίες, περισσότερο σε υψηλές ή σε φθαρμένο καμίνι. Για ακριβή αριθμό, διαβάστε τον μετρητή πριν και μετά από ένα ψήσιμο και συμπληρώστε τις μετρημένες kWh.</p>
+  </div>
+  <div class="card"><h2>${monthLabel(state.month)} σε ρεύμα</h2><div id="kMonth"></div></div>
+  <div class="card"><h2>Όγκος καμινιού</h2>
+    <div class="two">
+      ${kField('diam','Διάμετρος, πλευρά προς πλευρά (cm)',1)}
+      ${kField('depth','Βάθος (cm)',1)}
+      ${kField('sides','Αριθμός πλευρών',1)}
+      <div><label class="f">Ωφέλιμος όγκος</label><div class="big" id="kVol">—</div></div>
+    </div>
+    <p class="note">Οι προεπιλεγμένες διαστάσεις είναι εκτίμηση από φωτογραφία. Μετρήστε στο εσωτερικό του καμινιού για ακριβή τιμή.</p>
+  </div>
+  <div class="btns"><button class="btn primary" id="kSave" ${canWrite()?'':'disabled'}>Αποθήκευση ρυθμίσεων καμινιού</button><button class="btn" id="kReset">Επαναφορά προεπιλογών</button></div>
+  ${canWrite()?'':'<p class="note">Σε λειτουργία προβολής ο υπολογισμός λειτουργεί, αλλά οι αλλαγές δεν αποθηκεύονται.</p>'}`;
+  m.querySelectorAll('input[data-k]').forEach(inp=>inp.oninput=()=>{const v=parseFloat(inp.value);state.kiln[inp.dataset.k]=v>=0?v:0;updKiln()});
+  m.querySelectorAll('#kPresets button').forEach(b=>b.onclick=()=>{
+    const p=KILN_PRESETS.find(x=>x.k===b.dataset.p);Object.assign(state.kiln,{hours:p.hours,duty:p.duty});
+    $('k_hours').value=p.hours;$('k_duty').value=p.duty;updKiln()});
+  $('kReset').onclick=()=>{state.kiln={...KILN_DEF};renderKiln(m)};
+  $('kSave').onclick=async()=>{
+    const b=$('kSave');b.disabled=true;
+    try{const ix=await updateJSON('data/index.json',d=>({...(d||{rate:state.rate,months:[]}),kiln:{...state.kiln}}),'Ρυθμίσεις καμινιού');
+      state.kiln={...KILN_DEF,...ix.kiln};toast('Οι ρυθμίσεις καμινιού αποθηκεύτηκαν')}
+    catch(e){toast('Σφάλμα: '+e.message,4000)}
+    b.disabled=false;
+  };
+  updKiln();
+}
+function updKiln(){
+  const k=state.kiln,R=kilnCalc();
+  document.querySelectorAll('#kPresets button').forEach(b=>{const p=KILN_PRESETS.find(x=>x.k===b.dataset.p);b.classList.toggle('on',p.hours===k.hours&&p.duty===k.duty)});
+  $('kLiveLbl').textContent=`${n1(R.kwh)} kWh ${R.measured?'(μετρημένες)':'(εκτίμηση)'} × ${num(k.price)} €/kWh`;
+  $('kLive').textContent=eur(R.cost);
+  const max=Math.max(R.cost,R.school,0.01);
+  $('kRes').innerHTML=`
+    <div class="row"><span class="name">Ρεύμα ανά kg</span><span class="total">${k.load>0?eur(R.perKg):'—'}</span></div>
+    <div class="row"><span class="name">Χρέωση σχολής για το ίδιο φορτίο<br><small style="color:var(--muted)">${n1(k.load)} kg × ${eur(state.rate)}/kg</small></span><span class="total">${eur(R.school)}</span></div>
+    <div class="row"><span class="name">Το ρεύμα ως ποσοστό της χρέωσης</span><span class="total">${R.school>0?n1(R.pct)+'%':'—'}</span></div>
+    <div class="cmp">
+      <span>Ρεύμα</span><div class="bar"><span style="width:${R.cost/max*100}%;background:var(--iliana)"></span></div><span>${eur(R.cost)}</span>
+      <span>Σχολή</span><div class="bar"><span style="width:${R.school/max*100}%;background:var(--accent)"></span></div><span>${eur(R.school)}</span>
+    </div>
+    <p class="check">Η διαφορά καλύπτει φθορά αντιστάσεων και ραφιών, εργασία, ενοίκιο και περιθώριο της σχολής. Με μισογεμάτο φούρνισμα το ρεύμα ανά kg διπλασιάζεται.</p>`;
+  const es=(state.cache[state.month]||{}).entries||[];
+  const kgF=es.reduce((s,e)=>s+e.weight_g/1000*e.firings,0);const paid=es.reduce((s,e)=>s+costOf(e),0);
+  const elec=kgF*R.perKg;
+  $('kMonth').innerHTML=es.length?`
+    <div class="row"><span class="name">Κιλά × ψησίματα</span><span class="total">${kgF.toLocaleString('el-GR',{maximumFractionDigits:2})} kg</span></div>
+    <div class="row"><span class="name">Χρέωση σχολής</span><span class="total">${eur(r2(paid))}</span></div>
+    <div class="row"><span class="name">Αντίστοιχο κόστος ρεύματος</span><span class="total">${k.load>0?eur(r2(elec)):'—'}</span></div>
+    <p class="check">Με γεμάτο φούρνισμα ${n1(k.load)} kg. Το ρεύμα αντιστοιχεί περίπου στο ${paid>0&&k.load>0?n1(elec/paid*100):'—'}% όσων χρεώνει η σχολή.</p>`
+    :`<p class="note">Δεν υπάρχουν καταχωρίσεις για ${monthLabel(state.month)}.</p>`;
+  $('kVol').textContent=R.vol>0?`≈ ${Math.round(R.vol)} λίτρα`:'—';
 }
 
 function renderSettings(m){
