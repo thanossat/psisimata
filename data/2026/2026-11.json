@@ -2,6 +2,20 @@
   "month": "2026-11",
   "entries": [
     {
+      "id": "y6pybj7tq",
+      "date": "2026-11-09",
+      "artist": "thanos",
+      "title": "Κανατάκι",
+      "weight_g": 273,
+      "firings": 2,
+      "rate": 5,
+      "cost_eur": 2.73,
+      "photo": "photos/2026/11/20261109-thanos-oe6j93cnj.jpg",
+      "note": "",
+      "created": "2026-11-21T14:35:14",
+      "updated": "2026-11-21T14:35:14"
+    },
+    {
       "id": "kvhyk9wa8",
       "date": "2026-11-21",
       "artist": "iliana",
