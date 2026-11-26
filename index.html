@@ -126,6 +126,26 @@ ol.steps li{margin:4px 0}
 .cmp{display:grid;grid-template-columns:auto 1fr auto;gap:6px 10px;align-items:center;margin-top:10px;font-size:13px;font-variant-numeric:tabular-nums}
 .cmp .bar{grid-column:auto}
 .big{font-size:24px;font-weight:700;font-variant-numeric:tabular-nums}
+/* PDF μήνα (A4, 190 mm ωφέλιμο πλάτος) */
+.rep{width:718px;background:#fff;color:#2b2420;font-family:"Noto Sans",system-ui,sans-serif;font-size:11px;line-height:1.35;padding:2px}
+.rep .ok{color:#2f6b4a}.rep .no{color:#a3291b}
+.rep-h{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid #2b2420;padding-bottom:8px}
+.rep-t{font-family:"Noto Serif",serif;font-size:22px;font-weight:600}
+.rep-sub{font-size:13px;color:#b5562e;font-weight:600;margin-top:2px}
+.rep-meta{text-align:right;color:#7a6d64;font-size:10.5px}
+.rep-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:12px 0}
+.rep-kpis div{border:1px solid #e5d9cb;border-radius:8px;padding:7px 9px;background:#fffdf9}
+.rep-kpis small{display:block;color:#7a6d64;font-size:9.5px}
+.rep-kpis b{font-size:14px;font-variant-numeric:tabular-nums}
+.rep-h2{font-family:"Noto Serif",serif;font-size:14px;font-weight:600;margin:14px 0 6px}
+.rep-tb{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+.rep-tb th{font-size:9.5px;color:#7a6d64;font-weight:600;text-align:left;padding:5px 5px;border-bottom:1px solid #2b2420}
+.rep-tb td{padding:5px 5px;border-bottom:1px solid #e5d9cb;vertical-align:middle}
+.rep-tb tfoot td{border-top:2px solid #2b2420;border-bottom:0;font-weight:700}
+.rep-tb .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px}
+.rep-items img,.rep-items .noimg{width:46px;height:46px;object-fit:cover;border-radius:6px;display:block;background:#eadfd2}
+.rep-items .pay-c{font-size:10px;white-space:nowrap}
+.rep-note{color:#7a6d64;font-size:9.5px;margin:3px 0 0}
 </style>
 </head>
 <body>
@@ -427,9 +447,76 @@ function renderMonth(m){
     ${Math.abs(check-S.grand)>0.001?`<p class="check">Διαφορά στρογγυλοποίησης: άθροισμα μεριδίων ${eur(check)} έναντι συνόλου ${eur(S.grand)}.</p>`:''}
   </div>
   ${balancesCard()}
-  <div class="btns"><button class="btn primary" id="copyM">Αντιγραφή σύνοψης μήνα</button></div>`;
+  <div class="btns"><button class="btn primary" id="pdfM" ${S.n?'':'disabled'}>Λήψη PDF μήνα</button><button class="btn" id="copyM">Αντιγραφή σύνοψης μήνα</button></div>`;
   m.querySelectorAll('[data-settle]').forEach(b=>b.onclick=()=>settleMonth(b.dataset.settle,b));
+  $('pdfM').onclick=()=>monthPdf($('pdfM'));
   $('copyM').onclick=()=>copyText(`Ψησίματα ${monthLabel(state.month)}\n`+PEOPLE.map(p=>`${ARTISTS[p].name}: ${eur(S.tot[p])}${S.owed[p]>0?` (οφείλει ${eur(S.owed[p])})`:' (εξοφλημένο)'}`).join('\n')+`\nΣύνολο: ${eur(S.grand)}`,'Η σύνοψη μήνα αντιγράφηκε');
+}
+
+/* ---------- PDF μήνα ---------- */
+let h2pLoad=null;
+function loadPdfLib(){
+  if(window.html2pdf)return Promise.resolve();
+  return h2pLoad||(h2pLoad=new Promise((res,rej)=>{const s=document.createElement('script');s.src='vendor/html2pdf.bundle.min.js';
+    s.onload=()=>res();s.onerror=()=>{h2pLoad=null;rej(new Error('η βιβλιοθήκη PDF δεν φορτώθηκε'))};document.head.appendChild(s)}));
+}
+const loadImg=src=>new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=()=>rej(new Error('img'));i.src=src});
+async function thumbData(p){
+  if(!p)return null;
+  let img=null;
+  try{img=await loadImg(photoSrc(p))}catch(_){
+    if(canWrite()){try{const b=await api('GET',p,null,true);if(b){state.blobPhotos[p]=URL.createObjectURL(b);img=await loadImg(state.blobPhotos[p])}}catch(_){}}
+  }
+  if(!img)return null;
+  /* τετράγωνο κεντραρισμένο κόψιμο (το html2canvas δεν υποστηρίζει object-fit) */
+  const side=Math.min(img.width,img.height),c=document.createElement('canvas');c.width=c.height=180;
+  c.getContext('2d').drawImage(img,(img.width-side)/2,(img.height-side)/2,side,side,0,0,180,180);
+  return c.toDataURL('image/jpeg',.85);
+}
+function payStatus(e){
+  const d=p=>{const v=e.paid&&e.paid!==true?e.paid[p]:null;return typeof v==='string'?' '+new Date(v+'T12:00').toLocaleDateString('el-GR',{day:'numeric',month:'numeric'}):''};
+  if(e.artist==='shared')return PEOPLE.map(p=>`<div class="${isPaid(e,p)?'ok':'no'}">${isPaid(e,p)?'✓':'✗'} ${ARTISTS[p].name}${isPaid(e,p)?d(p):''}</div>`).join('');
+  const p=payersOf(e)[0];if(!p)return '';
+  return isPaid(e,p)?`<span class="ok">✓ Πληρώθηκε${d(p)}</span>`:'<span class="no">✗ Απλήρωτο</span>';
+}
+function reportHtml(m,es,S,thumbs){
+  const issued=new Date().toLocaleDateString('el-GR',{day:'numeric',month:'long',year:'numeric'});
+  return `<div class="rep-h"><div><div class="rep-t">Ψησίματα Σχολής</div><div class="rep-sub">Αναφορά μήνα: ${monthLabel(m)}</div></div>
+    <div class="rep-meta">Τιμή: ${eur(state.rate)}/kg ανά ψήσιμο<br>Έκδοση: ${issued}</div></div>
+  <div class="rep-kpis"><div><small>Αντικείμενα</small><b>${S.n}</b></div><div><small>Συνολικό βάρος</small><b>${kg(S.g)}</b></div><div><small>Συνολικό κόστος</small><b>${eur(S.grand)}</b></div><div><small>Οφειλόμενα</small><b class="${S.owedAll>0?'no':'ok'}">${eur(S.owedAll)}</b></div></div>
+  <div class="rep-sum"><div class="rep-h2">Ανά καλλιτέχνη</div>
+  <table class="rep-tb"><thead><tr><th>Καλλιτέχνης</th><th>Αντ.</th><th>Δικά</th><th>Μερίδιο κοινών</th><th>Σύνολο</th><th>Πληρωμένα</th><th>Οφειλόμενα</th></tr></thead>
+  <tbody>${PEOPLE.map(p=>`<tr><td><span class="dot" style="background:${ARTISTS[p].color}"></span>${ARTISTS[p].name}</td><td>${S.cnt[p]}</td><td>${eur(S.own[p])}</td><td>${eur(r2(S.tot[p]-S.own[p]))}</td><td><b>${eur(S.tot[p])}</b></td><td>${eur(S.paid[p])}</td><td class="${S.owed[p]>0?'no':'ok'}"><b>${eur(S.owed[p])}</b></td></tr>`).join('')}</tbody>
+  <tfoot><tr><td>Σύνολο</td><td>${S.n-S.sharedN}${S.sharedN?` + ${S.sharedN} κοινά`:''}</td><td></td><td>${eur(S.shared)}</td><td>${eur(S.grand)}</td><td>${eur(r2(S.grand-S.owedAll))}</td><td>${eur(S.owedAll)}</td></tr></tfoot></table>
+  ${S.sharedN?`<p class="rep-note">Τα κοινά αντικείμενα (${eur(S.shared)}) μοιράζονται ισομερώς: ${eur(S.share)} ανά καλλιτέχνη.</p>`:''}</div>
+  <div class="rep-h2">Καταχωρίσεις</div>
+  <table class="rep-tb rep-items"><thead><tr><th></th><th>Ημ/νία</th><th>Περιγραφή</th><th>Καλλιτέχνης</th><th>Βάρος</th><th>Ψησ.</th><th>Κόστος</th><th>Πληρωμή</th></tr></thead>
+  <tbody>${es.map((e,i)=>{const a=ARTISTS[e.artist]||ARTISTS.shared;const c=costOf(e);return `<tr>
+    <td>${thumbs[i]?`<img src="${thumbs[i]}" alt="">`:'<div class="noimg"></div>'}</td>
+    <td>${new Date(e.date+'T12:00').toLocaleDateString('el-GR',{day:'numeric',month:'numeric'})}</td>
+    <td>${esc(e.title||'Χωρίς περιγραφή')}${e.note?`<div class="rep-note">${esc(e.note)}</div>`:''}</td>
+    <td><span class="dot" style="background:${a.color}"></span>${a.name}</td>
+    <td>${kg(e.weight_g)}</td><td>${e.firings}</td>
+    <td><b>${eur(c)}</b>${e.artist==='shared'?`<div class="rep-note">${eur(r2(c/3))} ο καθένας</div>`:''}</td>
+    <td class="pay-c">${payStatus(e)}</td></tr>`}).join('')}</tbody>
+  <tfoot><tr><td></td><td colspan="3">Σύνολο μήνα</td><td>${kg(S.g)}</td><td>${S.f}</td><td>${eur(S.grand)}</td><td></td></tr></tfoot></table>
+  <p class="rep-note">Κόστος = βάρος (kg) × αριθμός ψησιμάτων × τιμή ανά kg.</p>`;
+}
+async function monthPdf(btn){
+  const m=state.month;const es=monthEntries(m).reverse();if(!es.length)return;
+  btn.disabled=true;btn.textContent='Δημιουργία PDF…';
+  try{
+    await loadPdfLib();
+    const thumbs=await Promise.all(es.map(e=>thumbData(e.photo).catch(()=>null)));
+    const el=document.createElement('div');el.className='rep';el.innerHTML=reportHtml(m,es,summarize(es),thumbs);
+    await window.html2pdf().set({
+      margin:[10,10,12,10],filename:`psisimata-${m}.pdf`,image:{type:'jpeg',quality:.92},
+      html2canvas:{scale:2,backgroundColor:'#ffffff'},jsPDF:{unit:'mm',format:'a4',orientation:'portrait'},
+      pagebreak:{mode:['css','legacy'],avoid:['tr','.rep-sum','.rep-kpis']}
+    }).from(el).save();
+    toast('Το PDF αποθηκεύτηκε');
+  }catch(e){toast('Σφάλμα PDF: '+(e.message||e),4000)}
+  btn.disabled=false;btn.textContent='Λήψη PDF μήνα';
 }
 
 function balancesCard(){
