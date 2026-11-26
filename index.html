@@ -39,6 +39,8 @@ h1{font-family:"Noto Serif",serif;font-weight:600;font-size:21px;margin:0}
 .list{display:flex;flex-direction:column;gap:10px}
 .item{display:flex;gap:12px;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:10px;cursor:pointer;text-align:left;width:100%}
 .item:hover{border-color:#d3c2ae}
+.grp{display:flex;justify-content:space-between;align-items:baseline;gap:8px;border-left:4px solid;padding:2px 0 2px 10px;margin-top:6px;font-size:13.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+.grp span:first-child{font-weight:700;font-size:15px}
 .item img{width:84px;height:84px;object-fit:cover;border-radius:10px;flex:none;background:#eadfd2}
 .item .body{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
 .item .top{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
@@ -373,6 +375,10 @@ async function settleMonth(p,btn){
   }catch(err){render();toast('Σφάλμα: '+err.message,4000)}
 }
 const monthEntries=m=>((state.cache[m]||{}).entries||[]).slice().sort((a,b)=>b.date.localeCompare(a.date));
+/* Ταξινόμηση ανά καλλιτέχνη (Θάνος, Ηλιάνα, Δημήτρης, Κοινά)· μέσα σε κάθε ομάδα κρατιέται η σειρά ημερομηνίας */
+const ARTIST_ORDER=['thanos','iliana','dimitris','shared'];
+const artistKey=e=>ARTISTS[e.artist]?e.artist:'shared';
+const byArtist=es=>es.map((e,i)=>[e,i]).sort((x,y)=>ARTIST_ORDER.indexOf(artistKey(x[0]))-ARTIST_ORDER.indexOf(artistKey(y[0]))||x[1]-y[1]).map(x=>x[0]);
 function yearYears(){const ys=new Set(state.months.map(m=>m.slice(0,4)));ys.add(now.slice(0,4));ys.add(state.year);return [...ys].sort().reverse()}
 
 /* ---------- Φωτογραφίες ---------- */
@@ -409,9 +415,11 @@ function render(){
 function kpiHtml(S){return `<div class="kpis"><div class="kpi"><small>Αντικείμενα</small><b>${S.n}</b></div><div class="kpi"><small>Συνολικό βάρος</small><b>${kg(S.g)}</b></div><div class="kpi"><small>Κόστος</small><b>${eur(S.grand)}</b></div></div>`}
 
 function renderList(m){
-  const es=monthEntries(state.month);const S=summarize(es);
+  const es=byArtist(monthEntries(state.month));const S=summarize(es);
   const banner=canWrite()?'':`<div class="info">Λειτουργία προβολής. Για να προσθέσετε καταχωρίσεις, ορίστε το GitHub token στις <a href="#" id="toSet">Ρυθμίσεις</a>.</div>`;
-  m.innerHTML=banner+kpiHtml(S)+(es.length?`<div class="list">${es.map(e=>{const a=ARTISTS[e.artist]||ARTISTS.shared;const c=costOf(e);return `
+  const head=k=>{const g=es.filter(e=>artistKey(e)===k);const a=ARTISTS[k];
+    return `<div class="grp" style="border-color:${a.color}"><span style="color:${a.color}">${a.name}</span><span>${g.length} αντ. · ${eur(r2(g.reduce((s,e)=>s+costOf(e),0)))}</span></div>`};
+  m.innerHTML=banner+kpiHtml(S)+(es.length?`<div class="btns" style="margin:0 0 12px"><button class="btn sm" id="pdfL">📄 Λήψη PDF μήνα</button></div>`:'')+(es.length?`<div class="list">${es.map((e,i)=>{const a=ARTISTS[e.artist]||ARTISTS.shared;const c=costOf(e);return (i===0||artistKey(es[i-1])!==artistKey(e)?head(artistKey(e)):'')+`
     <div class="item" role="button" tabindex="0" data-id="${esc(e.id)}">
       <img data-photo="${esc(e.photo)}" src="${esc(photoSrc(e.photo))}" alt="" loading="lazy">
       <div class="body">
@@ -428,6 +436,7 @@ function renderList(m){
     if(pb){ev.stopPropagation();if(canWrite()&&!pb.disabled)togglePaid(b.dataset.id,pb.dataset.pay,pb);return}
     if(canWrite())openForm(b.dataset.id)});
   if($('toSet'))$('toSet').onclick=e=>{e.preventDefault();setTab('settings')};
+  if($('pdfL'))$('pdfL').onclick=()=>monthPdf($('pdfL'));
   wirePhotos(m);
 }
 
@@ -503,8 +512,8 @@ function reportHtml(m,es,S,thumbs){
   <p class="rep-note">Κόστος = βάρος (kg) × αριθμός ψησιμάτων × τιμή ανά kg.</p>`;
 }
 async function monthPdf(btn){
-  const m=state.month;const es=monthEntries(m).reverse();if(!es.length)return;
-  btn.disabled=true;btn.textContent='Δημιουργία PDF…';
+  const m=state.month;const es=byArtist(monthEntries(m).reverse());if(!es.length)return;
+  const lbl=btn.textContent;btn.disabled=true;btn.textContent='Δημιουργία PDF…';
   try{
     await loadPdfLib();
     const thumbs=await Promise.all(es.map(e=>thumbData(e.photo).catch(()=>null)));
@@ -516,7 +525,7 @@ async function monthPdf(btn){
     }).from(el).save();
     toast('Το PDF αποθηκεύτηκε');
   }catch(e){toast('Σφάλμα PDF: '+(e.message||e),4000)}
-  btn.disabled=false;btn.textContent='Λήψη PDF μήνα';
+  btn.disabled=false;btn.textContent=lbl;
 }
 
 function balancesCard(){
